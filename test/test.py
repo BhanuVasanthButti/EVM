@@ -1,85 +1,80 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
-#-------------------EXISISTING CODE ENDS-------------
-
-# Pin mapping based on your tt_um_evm top module
-# ui_in[7:0] mapping:
-#   ui_in[0] = vote_candidate_1
-#   ui_in[1] = vote_candidate_2
-#   ui_in[2] = vote_candidate_3
-#   ui_in[3] = switch_on_evm
-#   ui_in[4] = candidate_ready
-#   ui_in[5] = voting_session_done
-#   ui_in[6] = switch_off_evm
-#   ui_in[7] = display_winner
-#
-# uio_in[1:0] = display_results
-#
-# uo_out[7:0] mapping:
-#   uo_out[1:0] = candidate_name
-#   uo_out[2] = invalid_results
-#   uo_out[3] = voting_in_progress
-#   uo_out[4] = voting_done
-#   uo_out[7:5] = unused (0)
-#
-# uio_out[6:0] = results (vote count)
+from cocotb.triggers import ClockCycles, RisingEdge, FallingEdge
 
 @cocotb.test()
 async def test_voting_machine(dut):
-    dut._log.info("Starting Voting Machine Test")
-
-    # Clock generation (10us -> 100kHz)
+    # The clock period should be short enough for the debounce/hold to work.
+    # Your Verilog uses a hold count of 0 to F (16 cycles). 
+    # A 10us clock (100kHz) is acceptable.
     clock = Clock(dut.clk, 10, units="us")
     cocotb.start_soon(clock.start())
 
-    # Reset
-    dut._log.info("Applying reset")
-    dut.rst_n.value = 0
-    dut.ena.value = 1
-    dut.ui_in.value = 0
-    dut.uio_in.value = 0
+    dut._log.info("Starting EVM Test")
+
+    # Initialize ALL inputs (Crucial for Verilog without Tiny Tapeout wrapper)
+    dut.i_candidate_1.value = 0
+    dut.i_candidate_2.value = 0
+    dut.i_candidate_3.value = 0
+    dut.i_voting_over.value = 0
+    # Your module uses 'rst', not 'rst_n'
+    dut.rst.value = 1 
     await ClockCycles(dut.clk, 5)
-    dut.rst_n.value = 1
-    await ClockCycles(dut.clk, 2)
+    
+    dut._log.info("De-asserting reset and starting VOTE state...")
+    dut.rst.value = 0 # De-assert reset (Active HIGH)
+    await ClockCycles(dut.clk, 2) # Wait for FSM to transition from IDLE to VOTE
 
     # ----------- Test sequence -----------
-    dut._log.info("Casting votes...")
+    # The Verilog counts on the FALLING EDGE (when the button is released).
+
+    dut._log.info("Casting votes: 3 for C1, 3 for C2, 2 for C3")
 
     # Vote for candidate 1 (3 times)
-    for _ in range(3):
-        dut.ui_in.value = 0b001  # candidate_1 high
+    for i in range(3):
+        dut.i_candidate_1.value = 1  # Press button
         await ClockCycles(dut.clk, 1)
-        dut.ui_in.value = 0
-        await ClockCycles(dut.clk, 1)
-
+        dut.i_candidate_1.value = 0  # Release button (Vote is counted here)
+        await ClockCycles(dut.clk, 1) 
+        # Wait for HOLD state to expire (Your debounce is 16 cycles, but 
+        # the test sequence provides enough time because we wait for 2 cycles
+        # per vote, transitioning to HOLD and then back to VOTE).
+        
     # Vote for candidate 2 (3 times)
-    for _ in range(3):
-        dut.ui_in.value = 0b010
+    for i in range(3):
+        dut.i_candidate_2.value = 1
         await ClockCycles(dut.clk, 1)
-        dut.ui_in.value = 0
+        dut.i_candidate_2.value = 0 # Vote is counted here
         await ClockCycles(dut.clk, 1)
-
+        
     # Vote for candidate 3 (2 times)
-    for _ in range(2):
-        dut.ui_in.value = 0b100
+    for i in range(2):
+        dut.i_candidate_3.value = 1
         await ClockCycles(dut.clk, 1)
-        dut.ui_in.value = 0
+        dut.i_candidate_3.value = 0 # Vote is counted here
         await ClockCycles(dut.clk, 1)
 
-    # End of voting
-    dut._log.info("Voting over signal")
-    dut.ui_in.value = 0b111  # e.g., vote_over
-    await ClockCycles(dut.clk, 2)
+    dut._log.info("Finished casting votes.")
+
+    # End of voting - Finalize the results
+    dut._log.info("Asserting i_voting_over...")
+    dut.i_voting_over.value = 1 # Assert the voting over signal
+    await ClockCycles(dut.clk, 5) # Give time for the outputs to update (FINISH state)
 
     # ----------- Check results -----------
-    dut._log.info(f"Candidate 1 votes: {dut.uo_out.value & 0xFF}")
-    dut._log.info(f"Candidate 2 votes: {(dut.uo_out.value >> 8) & 0xFF}")
-    dut._log.info(f"Candidate 3 votes: {(dut.uo_out.value >> 16) & 0xFF}")
-
-    # Assertions (adjust according to your module output mapping)
-    assert int(dut.result_1.value) == 3, "Candidate 1 should have 3 votes"
-    assert int(dut.result_2.value) == 3, "Candidate 2 should have 3 votes"
-    assert int(dut.result_3.value) == 2, "Candidate 3 should have 2 votes"
+    
+    # Check the state
+    assert int(dut.o_count1.value) == 3, f"C1 should be 3, got {int(dut.o_count1.value)}"
+    assert int(dut.o_count2.value) == 3, f"C2 should be 3, got {int(dut.o_count2.value)}"
+    assert int(dut.o_count3.value) == 2, f"C3 should be 2, got {int(dut.o_count3.value)}"
 
     dut._log.info("✅ All vote counts are correct!")
+
+    # Optional: De-assert voting_over to transition back to IDLE
+    dut._log.info("De-asserting i_voting_over to reset FSM state.")
+    dut.i_voting_over.value = 0
+    await ClockCycles(dut.clk, 2)
+    
+    # Check if counters are cleared when returning to IDLE (only when rst is active)
+    # The Verilog keeps the outputs displayed until rst is asserted.
+    # To check the internal counters are cleared, you'd need a way to monitor r_counter_X.
