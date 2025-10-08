@@ -68,7 +68,7 @@ async def test_voting_machine(dut):
     assert int(dut.o_count2.value) == 3, f"C2 should be 3, got {int(dut.o_count2.value)}"
     assert int(dut.o_count3.value) == 2, f"C3 should be 2, got {int(dut.o_count3.value)}"
 
-    dut._log.info("✅ All vote counts are correct!")
+    dut._log.info("All vote counts are correct!")
 
     # Optional: De-assert voting_over to transition back to IDLE
     dut._log.info("De-asserting i_voting_over to reset FSM state.")
