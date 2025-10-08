@@ -1,4 +1,6 @@
-
+import cocotb
+from cocotb.clock import Clock
+from cocotb.triggers import ClockCycles
 #-------------------EXISISTING CODE ENDS-------------
 
 # Pin mapping based on your tt_um_evm top module
