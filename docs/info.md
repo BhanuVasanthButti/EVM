@@ -9,11 +9,15 @@ You can also include images in this folder and reference them in the markdown. E
 
 ## How it works
 
-Explain how your project works
+The electronic voting machine (EVM) design counts votes for three candidates.
+Each candidate has one input button — pressing it increments that candidate’s vote count.
+When the vote_over signal is asserted, the voting process ends, and results for all three candidates are displayed as 6-bit binary outputs (o_count1, o_count2, o_count3).A reset (rst) signal clears all counts, preparing the system for a new voting session.
 
 ## How to test
 
-Explain how to use your project
+The testbench (tb_voting_machine) generates a clock and reset, then simulates button presses for all three candidates.
+Each press and release represents a vote, and after several votes, the vote_over signal is asserted to stop voting.
+Finally, it displays the total vote counts for each candidate and dumps all signals into a VCD file for waveform viewing.
 
 ## External hardware
 
