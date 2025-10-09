@@ -57,6 +57,7 @@ async def pulse_vote(dut, candidate_index):
     dut._log.info(f"--- Vote Cycle for C{candidate_index} ---")
     
     # 1. Enter Ballot (WAITING_FOR_CANDIDATE -> WAITING_FOR_CANDIDATE_TO_VOTE)
+    # Set candidate_ready high and leave it high to stay in the voting state
     await pulse_input(dut, UI_CANDIDATE_READY)
     await RisingEdge(dut.clk)
 
@@ -72,11 +73,16 @@ async def pulse_vote(dut, candidate_index):
     assert dut.uo_out.value.integer & (1 << UO_VOTING_DONE) != 0
 
     # 3. Exit Ballot (CANDIDATE_VOTED -> WAITING_FOR_CANDIDATE)
-    await pulse_input(dut, UI_CANDIDATE_READY) # Pulse a second time to exit
+    # To transition from CANDIDATE_VOTED back to WAITING_FOR_CANDIDATE,
+    # 'candidate_ready' must be LOW (based on your Verilog 'else' condition).
+    current_ui_in = dut.ui_in.value.integer
+    # Clear the UI_CANDIDATE_READY bit
+    dut.ui_in.value = current_ui_in & ~(1 << UI_CANDIDATE_READY) 
     await RisingEdge(dut.clk)
     
-    # Check LEDs: Both should be OFF after exit
-    assert (dut.uo_out.value.integer & (1 << UO_VOTING_IN_PROGRESS)) == 0
+    # Check LEDs: Both should be OFF after exit (now in WAITING_FOR_CANDIDATE)
+    assert (dut.uo_out.value.integer & (1 << UO_VOTING_IN_PROGRESS)) == 0, \
+        "Voting In Progress LED must be OFF after exit."
     assert (dut.uo_out.value.integer & (1 << UO_VOTING_DONE)) == 0
 
 
