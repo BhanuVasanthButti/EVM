@@ -6,7 +6,7 @@ from cocotb.triggers import ClockCycles
 async def test_voting_machine(dut):
     """Test voting machine through Tiny Tapeout wrapper"""
     
-    clock = Clock(dut.clk, 10, units="us")
+    clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
     
     dut._log.info("Starting EVM Test")
