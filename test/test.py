@@ -41,9 +41,15 @@ CANDIDATE_NAME_MAP = {1: 0b01, 2: 0b10, 3: 0b11}
 
 async def pulse_input(dut, pin_index, cycles=1):
     """Helper to pulse a single ui_in pin high for one cycle."""
-    dut.ui_in.value |= (1 << pin_index)
+    # FIX: Read the integer value, apply the bitwise OR, and write back.
+    current_ui_in = dut.ui_in.value.integer
+    dut.ui_in.value = current_ui_in | (1 << pin_index)
+    
     await ClockCycles(dut.clk, cycles)
-    dut.ui_in.value &= ~(1 << pin_index)
+    
+    # FIX: Read the integer value, apply the bitwise AND NOT, and write back.
+    current_ui_in = dut.ui_in.value.integer
+    dut.ui_in.value = current_ui_in & ~(1 << pin_index)
 
 
 async def pulse_vote(dut, candidate_index):
@@ -80,8 +86,9 @@ async def check_count(dut, candidate_index, expected_count):
     # Set display selector using UIO_IN[1:0]
     selector_value = {1: 0b00, 2: 0b01, 3: 0b10}[candidate_index]
     
-    # Set display_results
-    dut.uio_in.value = selector_value 
+    # Set display_results (UIO_IN[1:0])
+    # The UIO_IN value must be preserved, only UIO_IN[1:0] are used for display_results
+    dut.uio_in.value = (dut.uio_in.value.integer & ~0x03) | selector_value 
     await RisingEdge(dut.clk)
     
     # Read the count from UIO_OUT[6:0]
@@ -90,8 +97,8 @@ async def check_count(dut, candidate_index, expected_count):
     dut._log.info(f"Checking C{candidate_index}: Expected {expected_count}, Actual {actual_count}")
     assert actual_count == expected_count, f"C{candidate_index} count mismatch: Expected {expected_count}, got {actual_count}"
     
-    # Clear UIO_IN
-    dut.uio_in.value = 0
+    # Clear display bits in UIO_IN
+    dut.uio_in.value = dut.uio_in.value.integer & ~0x03
 
 
 @cocotb.test()
@@ -154,7 +161,8 @@ async def test_evm_full_flow(dut):
     dut._log.info("5. Checking winner display.")
     
     # Set display_winner bit high (ui_in[7])
-    dut.ui_in.value |= (1 << UI_DISPLAY_WINNER)
+    current_ui_in = dut.ui_in.value.integer
+    dut.ui_in.value = current_ui_in | (1 << UI_DISPLAY_WINNER)
     await RisingEdge(dut.clk)
     
     # Check Winner Count (should be C2 count = 4)
@@ -169,7 +177,8 @@ async def test_evm_full_flow(dut):
         f"Winner name mismatch: Expected {expected_name:b}, got {winner_name_actual:b}"
 
     # Clear display_winner
-    dut.ui_in.value &= ~(1 << UI_DISPLAY_WINNER)
+    current_ui_in = dut.ui_in.value.integer
+    dut.ui_in.value = current_ui_in & ~(1 << UI_DISPLAY_WINNER)
     await ClockCycles(dut.clk, 1)
 
     # ------------------------------------------------------------------
