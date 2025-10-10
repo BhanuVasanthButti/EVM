@@ -3,7 +3,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
-CLK_NS = 10  # 100 MHz
+CLK_NS = 20  # 200 MHz
 
 
 def set_bit(val: int, bit: int, on: bool) -> int:
