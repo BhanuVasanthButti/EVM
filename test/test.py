@@ -37,8 +37,10 @@ async def pulse_ui_bit(dut, ui_shadow: int, bit: int, cycles_high=1):
 
 
 async def start_machine(dut, ui_shadow: int):
-    # switch_on_evm is ui_in[3]
-    ui_shadow = await pulse_ui_bit(dut, ui_shadow, 3, cycles_high=1)
+    # switch_on_evm is ui_in[3]; set 1 to turn on
+    ui_shadow = set_bit(ui_shadow, 3, True)
+    dut.ui_in.value = ui_shadow
+    await tick(dut, 1)
     return ui_shadow
 
 
