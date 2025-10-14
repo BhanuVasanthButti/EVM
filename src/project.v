@@ -60,7 +60,7 @@ module tt_um_evm (
 
         .voting_session_done(ui_in[5]),
 
-        .switch_off_evm(ui_in[6]),
+       // .switch_off_evm(ui_in[6]),
 
         .display_winner(ui_in[7]),
 
@@ -80,7 +80,7 @@ module tt_um_evm (
  
   // List all unused inputs to prevent warnings
 
-    wire _unused = &{ena, uio_in[7:2], 1'b0};
+ wire _unused = &{ui_in[6],ena, uio_in[7:2], 1'b0};
  
 endmodule
  
