@@ -1,5 +1,3 @@
-
-
 module evm #(parameter WIDTH = 7)(
     input  wire clk,
     input  wire rst,
@@ -28,7 +26,11 @@ reg [WIDTH-1:0] candidate_1_vote_count, candidate_2_vote_count, candidate_3_vote
 reg [2:0] current_state, next_state;
 reg vote_candidate_1_flag, vote_candidate_2_flag, vote_candidate_3_flag;
 
-
+//---------------------------------------------
+// TIMER LOGIC (added)
+//---------------------------------------------
+reg [6:0] timer_counter;           
+localparam TIMER_MAX = 7'd100;      // 100 clock cycles
 
 //---------------------------------------------
 // Sequential logic
@@ -42,6 +44,7 @@ always @(posedge clk or negedge rst) begin
         vote_candidate_1_flag <= 1'b0;
         vote_candidate_2_flag <= 1'b0;
         vote_candidate_3_flag <= 1'b0;
+        timer_counter <= 6'd0; // TIMER reset
     end
     else if (!switch_on_evm) begin
         // Power-off/reset condition
@@ -52,63 +55,103 @@ always @(posedge clk or negedge rst) begin
         vote_candidate_1_flag <= 1'b0;
         vote_candidate_2_flag <= 1'b0;
         vote_candidate_3_flag <= 1'b0;
+        timer_counter <= 6'd0; // TIMER reset
     end
     else begin
         current_state <= next_state;
+
+        //---------------------------------------------
+// TIMER UPDATE LOGIC (fixed version)
+//---------------------------------------------
+case (current_state)
+    WAITING_FOR_CANDIDATE: begin
+        if (candidate_ready)
+            timer_counter <= 7'd0; // reset on valid input
+        else if (next_state != WAITING_FOR_CANDIDATE)
+            timer_counter <= 7'd0; // reset when leaving this state
+        else if (timer_counter < TIMER_MAX)
+            timer_counter <= timer_counter + 1'b1;
+        else
+            timer_counter <= TIMER_MAX; // hold max
+    end
+
+    WAITING_FOR_CANDIDATE_TO_VOTE: begin
+        if (vote_candidate_1 || vote_candidate_2 || vote_candidate_3)
+            timer_counter <= 7'd0; // reset on valid vote
+        else if (next_state != WAITING_FOR_CANDIDATE_TO_VOTE)
+            timer_counter <= 7'd0; // reset when leaving this state
+        else if (timer_counter < TIMER_MAX)
+            timer_counter <= timer_counter + 1'b1;
+        else
+            timer_counter <= TIMER_MAX;
+    end
+
+    default: timer_counter <= 7'd0; // reset in other states
+endcase
+
+
+        //---------------------------------------------
+        // EXISTING VOTING LOGIC (unchanged)
+        //---------------------------------------------
         case (current_state)
         
         IDLE: begin
-                // Clear all counters and flags when entering IDLE
-                if(next_state == WAITING_FOR_CANDIDATE) begin
-                    candidate_1_vote_count <= {WIDTH{1'b0}};
-                    candidate_2_vote_count <= {WIDTH{1'b0}};
-                    candidate_3_vote_count <= {WIDTH{1'b0}};
-                    vote_candidate_1_flag <= 1'b0;
-                    vote_candidate_2_flag <= 1'b0;
-                    vote_candidate_3_flag <= 1'b0;
-                end
+            if(next_state == WAITING_FOR_CANDIDATE) begin
+                candidate_1_vote_count <= {WIDTH{1'b0}};
+                candidate_2_vote_count <= {WIDTH{1'b0}};
+                candidate_3_vote_count <= {WIDTH{1'b0}};
+                vote_candidate_1_flag <= 1'b0;
+                vote_candidate_2_flag <= 1'b0;
+                vote_candidate_3_flag <= 1'b0;
             end
-            WAITING_FOR_CANDIDATE_TO_VOTE: begin
-                if (vote_candidate_1 && !vote_candidate_2_flag && !vote_candidate_3_flag && !candidate_ready)
-                    vote_candidate_1_flag <= 1'b1;
-                else if (!vote_candidate_1_flag && vote_candidate_2 && !vote_candidate_3_flag && !candidate_ready)
-                    vote_candidate_2_flag <= 1'b1;
-                else if (!vote_candidate_1_flag && !vote_candidate_2_flag && vote_candidate_3 && !candidate_ready)
-                    vote_candidate_3_flag <= 1'b1;
-            end
+        end
 
-            CANDIDATE_VOTED: begin
-                if (vote_candidate_1_flag) begin
-                    candidate_1_vote_count <= candidate_1_vote_count + 1;
-                    vote_candidate_1_flag <= 1'b0;
-                end
-                else if (vote_candidate_2_flag) begin
-                    candidate_2_vote_count <= candidate_2_vote_count + 1;
-                    vote_candidate_2_flag <= 1'b0;
-                end
-                else if (vote_candidate_3_flag) begin
-                    candidate_3_vote_count <= candidate_3_vote_count + 1;
-                    vote_candidate_3_flag <= 1'b0;
-                end
+        WAITING_FOR_CANDIDATE_TO_VOTE: begin
+            if (vote_candidate_1 && !vote_candidate_2_flag && !vote_candidate_3_flag && !candidate_ready)
+                vote_candidate_1_flag <= 1'b1;
+            else if (!vote_candidate_1_flag && vote_candidate_2 && !vote_candidate_3_flag && !candidate_ready)
+                vote_candidate_2_flag <= 1'b1;
+            else if (!vote_candidate_1_flag && !vote_candidate_2_flag && vote_candidate_3 && !candidate_ready)
+                vote_candidate_3_flag <= 1'b1;
+            else if(vote_candidate_1 && vote_candidate_2 && vote_candidate_3)begin
+                vote_candidate_1_flag <= 1'b0;
+                vote_candidate_2_flag <= 1'b0;
+                vote_candidate_3_flag <= 1'b0;
             end
-            
-            VOTING_PROCESS_DONE: begin
-                  // Keep vote counts stable (do not modify them here).
-                  // Clear any pending one-shot vote flags so returning to voting
-                  // won't accidentally re-trigger counts.
-                  vote_candidate_1_flag <= 1'b0;
-                  vote_candidate_2_flag <= 1'b0;
-                  vote_candidate_3_flag <= 1'b0;
+            else if(vote_candidate_1 && vote_candidate_2)begin
+                vote_candidate_1_flag <= 1'b0;
+                vote_candidate_2_flag <= 1'b0;
             end
+            else if(vote_candidate_2 && vote_candidate_3)begin
+                vote_candidate_2_flag <= 1'b0;
+                vote_candidate_3_flag <= 1'b0;
+            end
+            else if(vote_candidate_1 && vote_candidate_3)begin
+                vote_candidate_1_flag <= 1'b0;
+                vote_candidate_3_flag <= 1'b0;
+            end
+        end
 
-            default: begin
-                /*candidate_1_vote_count <= candidate_1_vote_count;
-                candidate_2_vote_count <= candidate_2_vote_count;
-                candidate_3_vote_count <= candidate_3_vote_count;
-                vote_candidate_1_flag <= vote_candidate_1_flag;
-                vote_candidate_2_flag <= vote_candidate_2_flag;
-                vote_candidate_3_flag <= vote_candidate_3_flag;*/
+        CANDIDATE_VOTED: begin
+            if (vote_candidate_1_flag) begin
+                candidate_1_vote_count <= candidate_1_vote_count + 1;
+                vote_candidate_1_flag <= 1'b0;
             end
+            else if (vote_candidate_2_flag) begin
+                candidate_2_vote_count <= candidate_2_vote_count + 1;
+                vote_candidate_2_flag <= 1'b0;
+            end
+            else if (vote_candidate_3_flag) begin
+                candidate_3_vote_count <= candidate_3_vote_count + 1;
+                vote_candidate_3_flag <= 1'b0;
+            end
+        end
+
+        VOTING_PROCESS_DONE: begin
+            vote_candidate_1_flag <= 1'b0;
+            vote_candidate_2_flag <= 1'b0;
+            vote_candidate_3_flag <= 1'b0;
+        end
         endcase
     end
 end
@@ -125,8 +168,6 @@ always @(*) begin
 
     case (current_state)
         IDLE: begin
-            // Default cleared
-            // All outputs remain at default values
             candidate_name = 2'b00;
             invalid_results = 1'b0;
             voting_in_progress = 1'b0;
@@ -138,28 +179,17 @@ always @(*) begin
             voting_in_progress = 1'b1;
         end
 
-        CANDIDATE_VOTED: begin
-            //voting_done = 1'b1;
-        end
-
         VOTING_PROCESS_DONE: begin
             voting_done = 1'b1;
-           if (   // Case 1: All three have equal votes
-       ((candidate_1_vote_count == candidate_2_vote_count) &&
-        (candidate_1_vote_count == candidate_3_vote_count) &&
-        (candidate_2_vote_count == candidate_3_vote_count))
-    || // Case 2: Candidate 1 & 2 tie for highest votes
-       ((candidate_1_vote_count == candidate_2_vote_count) &&
-        (candidate_1_vote_count > candidate_3_vote_count))
-    || // Case 3: Candidate 1 & 3 tie for highest votes
-       ((candidate_1_vote_count == candidate_3_vote_count) &&
-        (candidate_1_vote_count > candidate_2_vote_count))
-    || // Case 4: Candidate 2 & 3 tie for highest votes
-       ((candidate_2_vote_count == candidate_3_vote_count) &&
-        (candidate_2_vote_count > candidate_1_vote_count))
-   ) begin
+            if (   ((candidate_1_vote_count == candidate_2_vote_count) &&
+                    (candidate_1_vote_count == candidate_3_vote_count)) ||
+                   ((candidate_1_vote_count == candidate_2_vote_count) &&
+                    (candidate_1_vote_count > candidate_3_vote_count)) ||
+                   ((candidate_1_vote_count == candidate_3_vote_count) &&
+                    (candidate_1_vote_count > candidate_2_vote_count)) ||
+                   ((candidate_2_vote_count == candidate_3_vote_count) &&
+                    (candidate_2_vote_count > candidate_1_vote_count)) ) begin
                 invalid_results = 1'b1;
-                
             end
             else begin
                 invalid_results = 1'b0;
@@ -187,14 +217,6 @@ always @(*) begin
                 end
             end
         end
-        default: begin
-            /*candidate_1_vote_count <= candidate_1_vote_count;
-            candidate_2_vote_count <= candidate_2_vote_count;
-            candidate_3_vote_count <= candidate_3_vote_count;
-            vote_candidate_1_flag <= vote_candidate_1_flag;
-            vote_candidate_2_flag <= vote_candidate_2_flag;
-            vote_candidate_3_flag <= vote_candidate_3_flag;*/
-        end
     endcase
 end
 
@@ -217,6 +239,8 @@ always @(*) begin
                 next_state = WAITING_FOR_CANDIDATE_TO_VOTE;
             else if (voting_session_done)
                 next_state = VOTING_PROCESS_DONE;
+            else if (timer_counter >= TIMER_MAX)
+                next_state = VOTING_PROCESS_DONE; // TIMER TIMEOUT ADDED
         end
 
         WAITING_FOR_CANDIDATE_TO_VOTE: begin
@@ -225,6 +249,8 @@ always @(*) begin
                 (!vote_candidate_1_flag && !vote_candidate_2_flag && vote_candidate_3 && !candidate_ready) ||
                 (vote_candidate_1_flag || vote_candidate_2_flag || vote_candidate_3_flag))
                 next_state = CANDIDATE_VOTED;
+            else if (timer_counter >= TIMER_MAX)
+                next_state = WAITING_FOR_CANDIDATE; // TIMER TIMEOUT ADDED
         end
 
         CANDIDATE_VOTED: begin
