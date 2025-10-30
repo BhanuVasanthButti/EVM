@@ -44,7 +44,7 @@ always @(posedge clk or negedge rst) begin
         vote_candidate_1_flag <= 1'b0;
         vote_candidate_2_flag <= 1'b0;
         vote_candidate_3_flag <= 1'b0;
-        timer_counter <= 6'd0; // TIMER reset
+        timer_counter <= 7'd0; // TIMER reset
     end
     else if (!switch_on_evm) begin
         // Power-off/reset condition
@@ -55,7 +55,7 @@ always @(posedge clk or negedge rst) begin
         vote_candidate_1_flag <= 1'b0;
         vote_candidate_2_flag <= 1'b0;
         vote_candidate_3_flag <= 1'b0;
-        timer_counter <= 6'd0; // TIMER reset
+        timer_counter <= 7'd0; // TIMER reset
     end
     else begin
         current_state <= next_state;
@@ -152,6 +152,14 @@ endcase
             vote_candidate_2_flag <= 1'b0;
             vote_candidate_3_flag <= 1'b0;
         end
+            default: begin 
+                /*candidate_1_vote_count <= candidate_1_vote_count; still functions as the same ., the default case here is intended to stay in the same values
+                candidate_2_vote_count <= candidate_2_vote_count; 
+                candidate_3_vote_count <= candidate_3_vote_count; 
+                vote_candidate_1_flag <= vote_candidate_1_flag; 
+                vote_candidate_2_flag <= vote_candidate_2_flag;
+                vote_candidate_3_flag <= vote_candidate_3_flag;*/
+            end
         endcase
     end
 end
@@ -217,6 +225,14 @@ always @(*) begin
                 end
             end
         end
+         default: begin 
+                /*candidate_1_vote_count <= candidate_1_vote_count; still functions as the same ., the default case here is intended to stay in the same values
+                candidate_2_vote_count <= candidate_2_vote_count; 
+                candidate_3_vote_count <= candidate_3_vote_count; 
+                vote_candidate_1_flag <= vote_candidate_1_flag; 
+                vote_candidate_2_flag <= vote_candidate_2_flag;
+                vote_candidate_3_flag <= vote_candidate_3_flag;*/
+         end
     endcase
 end
 
