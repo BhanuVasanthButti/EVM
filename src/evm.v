@@ -69,10 +69,9 @@ case (current_state)
             timer_counter <= 7'd0; // reset on valid input
         else if (next_state != WAITING_FOR_CANDIDATE)
             timer_counter <= 7'd0; // reset when leaving this state
-        else if (timer_counter < TIMER_MAX)
+        else 
             timer_counter <= timer_counter + 1'b1;
-        else
-            timer_counter <= TIMER_MAX; // hold max
+
     end
 
     WAITING_FOR_CANDIDATE_TO_VOTE: begin
@@ -80,10 +79,9 @@ case (current_state)
             timer_counter <= 7'd0; // reset on valid vote
         else if (next_state != WAITING_FOR_CANDIDATE_TO_VOTE)
             timer_counter <= 7'd0; // reset when leaving this state
-        else if (timer_counter < TIMER_MAX)
+        else 
             timer_counter <= timer_counter + 1'b1;
-        else
-            timer_counter <= TIMER_MAX;
+
     end
 
     default: timer_counter <= 7'd0; // reset in other states
